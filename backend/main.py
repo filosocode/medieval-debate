@@ -233,6 +233,9 @@ def get_stats():
 # ─── Serve Frontend ───────────────────────────────────────────────────────────────
 
 # Serve static files (React build)
-static_dir = Path(__file__).parent / "static"
-if static_dir.exists():
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+else:
+    print(f"WARNING: Static directory not found at {static_dir}")
