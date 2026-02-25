@@ -12,6 +12,9 @@ frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
 
+# Backend static files
+backend/static/
+
 # IDE
 .vscode/
 .idea/

@@ -1,4 +1,4 @@
-const BASE = 'https://medieval-debate.onrender.com/api'
+const BASE = '/api'
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {

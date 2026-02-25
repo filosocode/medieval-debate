@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import sqlite3
 import os
 from datetime import datetime
+from pathlib import Path
 
 app = FastAPI(title="Medieval Debate API", version="1.0.0")
 
@@ -226,3 +228,11 @@ def get_stats():
     contra = conn.execute("SELECT COUNT(*) FROM arguments WHERE position='contra'").fetchone()[0]
     conn.close()
     return {"total": total, "favor": favor, "contra": contra}
+
+
+# ─── Serve Frontend ───────────────────────────────────────────────────────────────
+
+# Serve static files (React build)
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
