@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: medieval-debate
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: |
+      apt-get update && apt-get install -y nodejs npm &&
+      bash build.sh
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
