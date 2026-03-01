@@ -27,63 +27,69 @@ def get_db():
     return conn
 
 def init_db():
-    conn = get_db()
-    cur = conn.cursor()
+    try:
+        conn = get_db()
+        cur = conn.cursor()
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS arguments (
-            id SERIAL PRIMARY KEY,
-            author TEXT NOT NULL,
-            position TEXT NOT NULL CHECK(position IN ('favor', 'contra')),
-            content TEXT NOT NULL,
-            philosopher TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS arguments (
+                id SERIAL PRIMARY KEY,
+                author TEXT NOT NULL,
+                position TEXT NOT NULL CHECK(position IN ('favor', 'contra')),
+                content TEXT NOT NULL,
+                philosopher TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS conclusions (
-            id SERIAL PRIMARY KEY,
-            author TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS conclusions (
+                id SERIAL PRIMARY KEY,
+                author TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS debate_links (
-            id SERIAL PRIMARY KEY,
-            title TEXT NOT NULL,
-            url TEXT NOT NULL,
-            platform TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS debate_links (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                platform TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    # Seed data if empty
-    cur.execute("SELECT COUNT(*) FROM arguments")
-    if cur.fetchone()[0] == 0:
-        sample_args = [
-            ("María González", "favor", "La educación medieval en el Studium Generale sentó las bases del pensamiento crítico moderno. Los escolásticos, siguiendo a San Agustín, establecieron que la razón y la fe son complementarias, no opuestas.", "San Agustín"),
-            ("Carlos Muñoz", "contra", "La educación medieval era elitista y dogmática. El acceso al conocimiento era exclusivo de la nobleza y el clero, perpetuando estructuras de poder injustas y limitando el pensamiento libre.", None),
-            ("Luisa Torres", "favor", "Boecio demostró que incluso en adversidad extrema, la filosofía y el conocimiento son el mayor bien. Esta visión transformó la pedagogía medieval hacia una educación del carácter y la virtud.", "Boecio"),
-            ("Andrés Muñoz", "contra", "La Disputatio medieval, aunque aparentemente dialéctica, tenía conclusiones predeterminadas. Eriúgena fue condenado precisamente por llevar la razón más allá de los límites aceptados por la Iglesia.", "Eriúgena"),
-        ]
-        for author, position, content, philosopher in sample_args:
+        # Seed data if empty
+        cur.execute("SELECT COUNT(*) FROM arguments")
+        if cur.fetchone()[0] == 0:
+            sample_args = [
+                ("María González", "favor", "La educación medieval en el Studium Generale sentó las bases del pensamiento crítico moderno. Los escolásticos, siguiendo a San Agustín, establecieron que la razón y la fe son complementarias, no opuestas.", "San Agustín"),
+                ("Carlos Muñoz", "contra", "La educación medieval era elitista y dogmática. El acceso al conocimiento era exclusivo de la nobleza y el clero, perpetuando estructuras de poder injustas y limitando el pensamiento libre.", None),
+                ("Luisa Torres", "favor", "Boecio demostró que incluso en adversidad extrema, la filosofía y el conocimiento son el mayor bien. Esta visión transformó la pedagogía medieval hacia una educación del carácter y la virtud.", "Boecio"),
+                ("Andrés Muñoz", "contra", "La Disputatio medieval, aunque aparentemente dialéctica, tenía conclusiones predeterminadas. Eriúgena fue condenado precisamente por llevar la razón más allá de los límites aceptados por la Iglesia.", "Eriúgena"),
+            ]
+            for author, position, content, philosopher in sample_args:
+                cur.execute(
+                    "INSERT INTO arguments (author, position, content, philosopher) VALUES (%s, %s, %s, %s)",
+                    (author, position, content, philosopher)
+                )
+
             cur.execute(
-                "INSERT INTO arguments (author, position, content, philosopher) VALUES (%s, %s, %s, %s)",
-                (author, position, content, philosopher)
+                "INSERT INTO conclusions (author, content) VALUES (%s, %s)",
+                ("Grupo Filosofía Medieval", "La educación medieval, pese a sus limitaciones, fue el motor intelectual que permitió la transición hacia la modernidad. La tensión entre fe y razón generó un dinamismo filosófico extraordinario que culminaría en el Renacimiento.")
             )
 
-        cur.execute(
-            "INSERT INTO conclusions (author, content) VALUES (%s, %s)",
-            ("Grupo Filosofía Medieval", "La educación medieval, pese a sus limitaciones, fue el motor intelectual que permitió la transición hacia la modernidad. La tensión entre fe y razón generó un dinamismo filosófico extraordinario que culminaría en el Renacimiento.")
-        )
+        conn.commit()
+        conn.close()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Database initialization error (will retry): {e}")
 
-    conn.commit()
-    conn.close()
-
-init_db()
+@app.on_event("startup")
+async def startup():
+    init_db()
 
 
 # ─── Models ───────────────────────────────────────────────────────────────────
