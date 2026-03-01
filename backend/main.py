@@ -85,11 +85,18 @@ def init_db():
         conn.close()
         print("Database initialized successfully")
     except Exception as e:
-        print(f"Database initialization error (will retry): {e}")
+        import traceback
+        print(f"Database initialization error: {type(e).__name__}: {e}")
+        traceback.print_exc()
 
 @app.on_event("startup")
 async def startup():
-    init_db()
+    import traceback
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Failed to initialize database: {e}")
+        traceback.print_exc()
 
 
 # ─── Models ───────────────────────────────────────────────────────────────────
