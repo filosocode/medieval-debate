@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import os
 from datetime import datetime
 from pathlib import Path
@@ -18,47 +19,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = "debate.db"
-
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable not set")
+    conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
     return conn
 
 def init_db():
     conn = get_db()
     cur = conn.cursor()
-    
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS arguments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             author TEXT NOT NULL,
             position TEXT NOT NULL CHECK(position IN ('favor', 'contra')),
             content TEXT NOT NULL,
             philosopher TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS conclusions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             author TEXT NOT NULL,
             content TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS debate_links (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             url TEXT NOT NULL,
             platform TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    
+
     # Seed data if empty
     cur.execute("SELECT COUNT(*) FROM arguments")
     if cur.fetchone()[0] == 0:
@@ -68,16 +69,17 @@ def init_db():
             ("Luisa Torres", "favor", "Boecio demostró que incluso en adversidad extrema, la filosofía y el conocimiento son el mayor bien. Esta visión transformó la pedagogía medieval hacia una educación del carácter y la virtud.", "Boecio"),
             ("Andrés Muñoz", "contra", "La Disputatio medieval, aunque aparentemente dialéctica, tenía conclusiones predeterminadas. Eriúgena fue condenado precisamente por llevar la razón más allá de los límites aceptados por la Iglesia.", "Eriúgena"),
         ]
-        cur.executemany(
-            "INSERT INTO arguments (author, position, content, philosopher) VALUES (?,?,?,?)",
-            sample_args
-        )
-        
+        for author, position, content, philosopher in sample_args:
+            cur.execute(
+                "INSERT INTO arguments (author, position, content, philosopher) VALUES (%s, %s, %s, %s)",
+                (author, position, content, philosopher)
+            )
+
         cur.execute(
-            "INSERT INTO conclusions (author, content) VALUES (?,?)",
+            "INSERT INTO conclusions (author, content) VALUES (%s, %s)",
             ("Grupo Filosofía Medieval", "La educación medieval, pese a sus limitaciones, fue el motor intelectual que permitió la transición hacia la modernidad. La tensión entre fe y razón generó un dinamismo filosófico extraordinario que culminaría en el Renacimiento.")
         )
-    
+
     conn.commit()
     conn.close()
 
@@ -151,11 +153,11 @@ def get_philosophers():
 @app.get("/api/arguments")
 def get_arguments():
     conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM arguments ORDER BY created_at DESC"
-    ).fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM arguments ORDER BY created_at DESC")
+    rows = cur.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return list(rows)
 
 @app.post("/api/arguments", status_code=201)
 def create_argument(body: ArgumentCreate):
@@ -164,18 +166,19 @@ def create_argument(body: ArgumentCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO arguments (author, position, content, philosopher) VALUES (?,?,?,?)",
+        "INSERT INTO arguments (author, position, content, philosopher) VALUES (%s,%s,%s,%s) RETURNING *",
         (body.author, body.position, body.content, body.philosopher)
     )
+    row = cur.fetchone()
     conn.commit()
-    row = conn.execute("SELECT * FROM arguments WHERE id=?", (cur.lastrowid,)).fetchone()
     conn.close()
-    return dict(row)
+    return row
 
 @app.delete("/api/arguments/{arg_id}")
 def delete_argument(arg_id: int):
     conn = get_db()
-    conn.execute("DELETE FROM arguments WHERE id=?", (arg_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM arguments WHERE id=%s", (arg_id,))
     conn.commit()
     conn.close()
     return {"deleted": arg_id}
@@ -183,49 +186,57 @@ def delete_argument(arg_id: int):
 @app.get("/api/conclusions")
 def get_conclusions():
     conn = get_db()
-    rows = conn.execute("SELECT * FROM conclusions ORDER BY created_at DESC").fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM conclusions ORDER BY created_at DESC")
+    rows = cur.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return list(rows)
 
 @app.post("/api/conclusions", status_code=201)
 def create_conclusion(body: ConclusionCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO conclusions (author, content) VALUES (?,?)",
+        "INSERT INTO conclusions (author, content) VALUES (%s,%s) RETURNING *",
         (body.author, body.content)
     )
+    row = cur.fetchone()
     conn.commit()
-    row = conn.execute("SELECT * FROM conclusions WHERE id=?", (cur.lastrowid,)).fetchone()
     conn.close()
-    return dict(row)
+    return row
 
 @app.get("/api/links")
 def get_links():
     conn = get_db()
-    rows = conn.execute("SELECT * FROM debate_links ORDER BY created_at DESC").fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM debate_links ORDER BY created_at DESC")
+    rows = cur.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return list(rows)
 
 @app.post("/api/links", status_code=201)
 def create_link(body: DebateLinkCreate):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO debate_links (title, url, platform) VALUES (?,?,?)",
+        "INSERT INTO debate_links (title, url, platform) VALUES (%s,%s,%s) RETURNING *",
         (body.title, body.url, body.platform)
     )
+    row = cur.fetchone()
     conn.commit()
-    row = conn.execute("SELECT * FROM debate_links WHERE id=?", (cur.lastrowid,)).fetchone()
     conn.close()
-    return dict(row)
+    return row
 
 @app.get("/api/stats")
 def get_stats():
     conn = get_db()
-    total = conn.execute("SELECT COUNT(*) FROM arguments").fetchone()[0]
-    favor = conn.execute("SELECT COUNT(*) FROM arguments WHERE position='favor'").fetchone()[0]
-    contra = conn.execute("SELECT COUNT(*) FROM arguments WHERE position='contra'").fetchone()[0]
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM arguments")
+    total = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM arguments WHERE position=%s", ("favor",))
+    favor = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM arguments WHERE position=%s", ("contra",))
+    contra = cur.fetchone()[0]
     conn.close()
     return {"total": total, "favor": favor, "contra": contra}
 
