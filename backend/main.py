@@ -28,7 +28,12 @@ def get_db():
 
 def init_db():
     try:
-        conn = get_db()
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url:
+            raise RuntimeError("DATABASE_URL environment variable not set")
+
+        # Use regular cursor for init (not RealDictCursor)
+        conn = psycopg2.connect(database_url)
         cur = conn.cursor()
 
         cur.execute("""
@@ -63,7 +68,8 @@ def init_db():
 
         # Seed data if empty
         cur.execute("SELECT COUNT(*) FROM arguments")
-        if cur.fetchone()[0] == 0:
+        count_result = cur.fetchone()
+        if count_result and count_result[0] == 0:
             sample_args = [
                 ("María González", "favor", "La educación medieval en el Studium Generale sentó las bases del pensamiento crítico moderno. Los escolásticos, siguiendo a San Agustín, establecieron que la razón y la fe son complementarias, no opuestas.", "San Agustín"),
                 ("Carlos Muñoz", "contra", "La educación medieval era elitista y dogmática. El acceso al conocimiento era exclusivo de la nobleza y el clero, perpetuando estructuras de poder injustas y limitando el pensamiento libre.", None),
